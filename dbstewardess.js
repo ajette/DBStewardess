@@ -12,14 +12,16 @@ var messages = fs.readFileSync('./dbs.txt').toString().split('\n');
 var lunch = ['Chipotle', 'Market District', 'Palermo'];
 var lunch_messages = ['I could sure composite some ',
                       'Oh god oh god please bring me a TABLE of ',
-                      'Been far too long since I extracted some'];
+                      'Been far too long since I extracted some '];
 
 var config_file = JSON.parse(fs.readFileSync('./dbconfig.txt'));
 
 var config = {
 	channels: [channel],
 	server: config_file.server,
-	botName: "dbstewardess"
+	botName: "dbstewardess",
+        memeUser: config_file.imgflipuser,
+        memePass: config_file.imgflippass
 };
 
 var irc = require("irc");
@@ -100,6 +102,16 @@ bot.addListener("message", function(from, to, text, message) {
     bot.say(channel,
             genetiks[Math.floor(Math.random() * genetiks.length)]);
     bot.send("NICK", "dbstewardess");
+  }
+  else if (text.match(/(.*)\spls/i)) {
+      var match = text.match(/(.*)\spls/i);
+
+    http.get("http://api.imgflip.com/caption_image?username=" + config.memeUser + "&password=" + config.memePass + "&template_id=496780&text0=" + match[1] + "&text1=pls",
+      function(res) {
+        res.on('data', function(chunk) {
+          bot.say(channel, "You didn't forget to say pls! " + JSON.parse(chunk).data.page_url);
+        } 
+    )});
   }
   else if (text.match(/jira/i) && text.match(/down/i)) {
     var jira_response = "";
