@@ -15,6 +15,7 @@ var lunch_messages = ['I could sure composite some ',
                       'Been far too long since I extracted some '];
 
 var config_file = JSON.parse(fs.readFileSync('./dbconfig.txt'));
+var meme_config = JSON.parse(fs.readFileSync('./memeconfig.json'));
 
 var config = {
 	channels: [channel],
@@ -37,6 +38,25 @@ bot.addListener("message", function(from, to, text, message) {
     if (text.match(/CMDLIST/)) {
       bot.say(from, messages.toString());
     }
+    else if (text.match(/^MEME/)) {
+      try {
+        var newmeme = JSON.parse(text.substring(4));
+        if (parseInt(newmeme.memeId) == Number.NaN ||
+            newmeme.memeTrigger.length < 3 ||
+            newmeme.memeText2.length < 3) {
+          bot.say(from, 'Must be in format: {"memeId": numeric (https://api.imgflip.com/popular_meme_ids), "memeTrigger": "string greater than 3", "memeText2": "string greater than 3"}, e.g. {"memeId": 496780, "memeTrigger": "pls", "memeText2": "pls"}');
+        }
+        else {
+          meme_config.memes.push(newmeme);
+          fs.writeFileSync('./memeconfig.json', JSON.stringify(meme_config));
+          bot.say(from, 'Yeahhhhhhhhhhhhhhhhhhhhh Boy');
+          bot.say(channel, newmeme.memeTrigger + ' meme in the house!');
+        }
+      }
+      catch (e) {
+        bot.say(from, 'Could not parse JSON. Must be in format: {"memeId": numeric (https://api.imgflip.com/popular_meme_ids), "memeTrigger": "string greater than 3", "memeText2": "string greater than 3"}, e.g. {"memeId": 496780, "memeTrigger": "pls", "memeText2": "pls"}');
+      }
+    }
     else if (text.match(/^PUPPET/)) {
       bot.say(from, 'Oooo nice hands');
       bot.say(channel, text.substring(6));
@@ -54,7 +74,7 @@ bot.addListener("message", function(from, to, text, message) {
       messages.push(text);
     }
   }
-  if (text.match(/dbstewardess/i)) {
+  else if (text.match(/dbstewardess/i)) {
     if (text.match(/\?$/)) {
       // magic 8ball
       var an8th = ['Signs point to hell yes.',
@@ -103,16 +123,6 @@ bot.addListener("message", function(from, to, text, message) {
             genetiks[Math.floor(Math.random() * genetiks.length)]);
     bot.send("NICK", "dbstewardess");
   }
-  else if (text.match(/(.*)\spls/i)) {
-      var match = text.match(/(.*)\spls/i);
-
-    http.get("http://api.imgflip.com/caption_image?username=" + config.memeUser + "&password=" + config.memePass + "&template_id=496780&text0=" + match[1] + "&text1=pls",
-      function(res) {
-        res.on('data', function(chunk) {
-          bot.say(channel, "You didn't forget to say pls! " + JSON.parse(chunk).data.page_url);
-        } 
-    )});
-  }
   else if (text.match(/jira/i) && text.match(/down/i)) {
     var jira_response = "";
     var not_response = "";
@@ -139,6 +149,29 @@ bot.addListener("message", function(from, to, text, message) {
       });
     });
   }
+  else {
+    for (var i = 0; i < meme_config.memes.length; i++) {
+      var reg = new RegExp('(.*)\\s' + meme_config.memes[i].memeTrigger);
+      if (text.match(reg)) {
+          var match = text.match(reg);
+
+          var trigger = meme_config.memes[i].memeTrigger;
+          var call = "http://api.imgflip.com/caption_image?username=" + config.memeUser + "&password=" + config.memePass + "&template_id=" + meme_config.memes[i].memeId + "&text0=" + match[1] + "&text1=" + meme_config.memes[i].memeText2;
+          http.get(call,
+            function(res) {
+              res.on('data', function(chunk) {
+                try {
+                  bot.say(channel, "You didn't forget to say " + trigger + "! " + JSON.parse(chunk).data.page_url);
+                }
+                catch (err) {
+                  bot.say(from, "API call to your meme failed :( - " + call);
+                }
+              } 
+          )});
+      }
+    }
+  }
 });
+
 
 
