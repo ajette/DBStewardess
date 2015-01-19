@@ -9,7 +9,7 @@ var http = require('http');
 var fs = require('fs');
 
 var messages = fs.readFileSync('./dbs.txt').toString().split('\n');
-var lunch = ['Chipotle', 'Market District', 'Palermo'];
+var lunch = ['Chipotle', 'Market District', 'Palermo', 'Sams'];
 var lunch_messages = ['I could sure composite some ',
                       'Oh god oh god please bring me a TABLE of ',
                       'Been far too long since I extracted some '];
@@ -33,6 +33,12 @@ var bot = new irc.Client(config.server, config.botName, {
   password: config_file.password
 });
 
+setTimeout(function() {
+	bot.disc
+})
+
+// only talk lunch once a day
+var lastLunchTime;
 var memeMessage = 'Must be in format: {"memeId": numeric (https://api.imgflip.com/popular_meme_ids), "memeTrigger": "string greater than 3, possibly regex", "memeText1": "string, possibly with backreferences" "memeText2": "string, possibly with backreferences", "memeLabel": "an optional label for the meme"}, e.g. {"memeId":61579,"memeLabel":"one does not simply","memeTrigger":"one does not simply (.*)","memeText1":"one does not simply","memeText2":"$1"}';
 
 bot.addListener("message", function(from, to, text, message) {
@@ -106,16 +112,22 @@ bot.addListener("message", function(from, to, text, message) {
     }
   }
   else if (text.match(/lunch/i) || text.match(/food/i) || text.match(/hungry/i)) {
-    if (text.match(/pmo/i) || text.match(/palermo/i)) {
-      bot.say(channel,
-              "Oh yeah a TABLE full of pizza");
-    }
-    else {
-      bot.say(channel,
-              lunch_messages[Math.floor(Math.random() * lunch_messages.length)] +
-              lunch[Math.floor(Math.random() * lunch.length)]);
+	var newLunchTime = (new Date()).getDate();
+	if (lastLunchTime != newLunchTime) {
+	  lastLunchTime = newLunchTime;
+	
+      if (text.match(/pmo/i) || text.match(/palermo/i)) {
+        bot.say(channel,
+                "Oh yeah a TABLE full of pizza");
+      }
+      else {
+        bot.say(channel,
+                lunch_messages[Math.floor(Math.random() * lunch_messages.length)] +
+                lunch[Math.floor(Math.random() * lunch.length)]);
+      }
     }
   }
+
   else if (text.match(/creasy/i)) {
     var genetiks= ['NO NO NO NO NO NO NO NO NON ONONO NONONONON NONO NON ONONONO NO NO NO NO NO NO',
                    'You can do that if you are stupid'];
