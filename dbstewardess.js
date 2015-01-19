@@ -39,6 +39,7 @@ setTimeout(function() {
 
 // only talk lunch once a day
 var lastLunchTime;
+var memeMessage = 'Must be in format: {"memeId": numeric (https://api.imgflip.com/popular_meme_ids), "memeTrigger": "string greater than 3, possibly regex", "memeText1": "string, possibly with backreferences" "memeText2": "string, possibly with backreferences", "memeLabel": "an optional label for the meme"}, e.g. {"memeId":61579,"memeLabel":"one does not simply","memeTrigger":"one does not simply (.*)","memeText1":"one does not simply","memeText2":"$1"}';
 
 bot.addListener("message", function(from, to, text, message) {
   if (to == "dbstewardess") {
@@ -49,19 +50,18 @@ bot.addListener("message", function(from, to, text, message) {
       try {
         var newmeme = JSON.parse(text.substring(4));
         if (parseInt(newmeme.memeId) == Number.NaN ||
-            newmeme.memeTrigger.length < 3 ||
-            newmeme.memeText2.length < 3) {
-          bot.say(from, 'Must be in format: {"memeId": numeric (https://api.imgflip.com/popular_meme_ids), "memeTrigger": "string greater than 3", "memeText2": "string greater than 3"}, e.g. {"memeId": 496780, "memeTrigger": "pls", "memeText2": "pls"}');
+            newmeme.memeTrigger.length < 3) {
+          bot.say(from, memeMessage);
         }
         else {
           meme_config.memes.push(newmeme);
           fs.writeFileSync('./memeconfig.json', JSON.stringify(meme_config));
           bot.say(from, 'Yeahhhhhhhhhhhhhhhhhhhhh Boy');
-          bot.say(channel, newmeme.memeTrigger + ' meme in the house!');
+          bot.say(channel, (newmeme.memeLabel || newmeme.memeTrigger) + ' meme in the house!');
         }
       }
       catch (e) {
-        bot.say(from, 'Could not parse JSON. Must be in format: {"memeId": numeric (https://api.imgflip.com/popular_meme_ids), "memeTrigger": "string greater than 3", "memeText2": "string greater than 3"}, e.g. {"memeId": 496780, "memeTrigger": "pls", "memeText2": "pls"}');
+        bot.say(from, 'Could not parse JSON. ' + memeMessage);
       }
     }
     else if (text.match(/^PUPPET/)) {
@@ -164,20 +164,31 @@ bot.addListener("message", function(from, to, text, message) {
   }
   else {
     for (var i = 0; i < meme_config.memes.length; i++) {
-      var reg = new RegExp('(.*)\\s' + meme_config.memes[i].memeTrigger, "i");
+      var m = meme_config.memes[i];
+      var reg = new RegExp(m.memeTrigger, 'i');
+      console.log('match?', text, m.memeTrigger, console.log(text.match(reg)));
       if (text.match(reg)) {
           var match = text.match(reg);
 
-          var trigger = meme_config.memes[i].memeTrigger;
-          var call = "http://api.imgflip.com/caption_image?username=" + config.memeUser + "&password=" + config.memePass + "&template_id=" + meme_config.memes[i].memeId + "&text0=" + match[1] + "&text1=" + meme_config.memes[i].memeText2;
+          var trigger = m.memeTrigger;
+          var text1 = substitute(m.memeText1, match);
+          var text2 = substitute(m.memeText2, match);
+          console.log('MEME:', m.memeId, text1, text2);
+          var call = "http://api.imgflip.com/caption_image?username=" + encodeURIComponent(config.memeUser) +
+            "&password=" + encodeURIComponent(config.memePass) +
+            "&template_id=" + m.memeId +
+            "&text0=" + encodeURIComponent(text1) +
+            "&text1=" + encodeURIComponent(text2);
+          var label = m.memeLabel || trigger;
           http.get(call,
             function(res) {
               res.on('data', function(chunk) {
                 try {
-                  bot.say(channel, "You didn't forget to say " + trigger + "! " + JSON.parse(chunk).data.url);
+                  bot.say(channel, "You didn't forget to say " + label + "! " + JSON.parse(chunk).data.page_url);
                 }
                 catch (err) {
                   bot.say(from, "API call to your meme failed :( - " + call);
+                  console.error(err);
                 }
               } 
           )});
@@ -186,5 +197,9 @@ bot.addListener("message", function(from, to, text, message) {
   }
 });
 
-
+function substitute(text, matches) {
+  return text.replace(/\$(\d+)/, function(_, n) {
+    return matches[parseInt(n)];
+  });
+}
 
