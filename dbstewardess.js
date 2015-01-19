@@ -198,7 +198,7 @@ bot.addListener("message", function(from, to, text, message) {
 });
 
 function substitute(text, matches) {
-  return text.replace(/\$(\d+)/, function(_, n) {
+  return text.replace(/\$(\d+)/g, function(_, n) {
     return matches[parseInt(n)];
   });
 }
