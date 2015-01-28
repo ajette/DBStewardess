@@ -2,10 +2,12 @@
 // npm install irc
 // npm install fs
 
+
 var channel = '#publicchan';
 //var channel = '#sandbox';
 
 var http = require('http');
+var https = require('https');
 var fs = require('fs');
 
 var messages = fs.readFileSync('./dbs.txt').toString().split('\n');
@@ -40,6 +42,52 @@ setTimeout(function() {
 // only talk lunch once a day
 var lastLunchTime;
 var memeMessage = 'Must be in format: {"memeId": numeric (https://api.imgflip.com/popular_meme_ids), "memeTrigger": "string greater than 3, possibly regex", "memeText1": "string, possibly with backreferences" "memeText2": "string, possibly with backreferences", "memeLabel": "an optional label for the meme"}, e.g. {"memeId":61579,"memeLabel":"one does not simply","memeTrigger":"one does not simply (.*)","memeText1":"one does not simply","memeText2":"$1"}';
+
+console.log(config_file.jenkinsjob);
+var lastBuild = '';
+var jenkinsOptions = {
+	hostname: config_file.jenkinshost,
+	path: '/jenkins/job/' + config_file.jenkinsjob + '/lastBuild/api/json',
+	port: 443,
+	auth: config_file.jenkinsusertoken,
+	method: 'GET',
+	rejectUnauthorized: 0
+}
+
+setInterval(function() {
+https.get(jenkinsOptions,
+	function(response) {
+		var body = '';
+		response.on('data', function(d) {
+			body += d;
+		});
+		response.on('end', function() {
+			var parsed = JSON.parse(body);
+			
+			if (parsed.number != lastBuild) {
+				lastBuild = parsed.number;
+				if (parsed.result == 'FAILURE') {
+					bot.say(channel, "Failed Jenkins " + config_file.jenkinsjob + " " + parsed.number + " - " + parsed.url + "console");
+					var commitNotReg = /commit notification (.*)/;
+					for (var action in parsed.actions) {
+						for (var cause in parsed.actions[action].causes) {
+							var culprits = [];
+							for (var culprit in parsed.culprits) {
+								culprits.push(parsed.culprits[culprit].fullName);
+							}
+							var matches = parsed.actions[action].causes[cause].shortDescription.match(commitNotReg);
+							if (matches.length > 0) {
+								bot.say(channel, "Triggered by " + config_file.stashurl + matches[1] + ". Culprits: " + culprits.join(", ") );
+							}
+						}
+					}
+				}
+			}
+		});
+	});},
+60000
+);
+
 
 bot.addListener("message", function(from, to, text, message) {
   if (to == "dbstewardess") {
