@@ -3,12 +3,12 @@
 // npm install fs
 
 
-var channel = '#publicchan';
-//var channel = '#sandbox';
+var channel = '#sandbox';
 
 var http = require('http');
 var https = require('https');
 var fs = require('fs');
+var PlugAPI = require('plugapi');
 
 var messages = fs.readFileSync('./dbs.txt').toString().split('\n');
 var lunch = ['Chipotle', 'Market District', 'Palermo', 'Sams'];
@@ -35,6 +35,12 @@ var bot = new irc.Client(config.server, config.botName, {
   password: config_file.password
 });
 
+var plugBot = new PlugAPI({
+    "email": config_file.plugemail,
+    "password": config_file.plugpassword
+});
+plugBot.connect(config_file.plugroom);
+
 setTimeout(function() {
 	bot.disc
 })
@@ -54,6 +60,8 @@ var jenkinsOptions = {
 	rejectUnauthorized: 0
 }
 
+/*
+Jenkins logic needs rewired
 setInterval(function() {
 https.get(jenkinsOptions,
 	function(response) {
@@ -86,26 +94,56 @@ https.get(jenkinsOptions,
 		});
 	});},
 60000
-);
-
+);*/
 
 bot.addListener("message", function(from, to, text, message) {
+	messageReceived(from, to, text, message, "irc");
+});
+
+plugBot.on('chat', function(data) {
+	if (data.from != "OGDBStewardess") {
+	  messageReceived(data.from, "", data.message, "", "plug")
+	}
+});
+
+plugBot.on('advance', function(data) {
+	plugBot.woot(function(){});
+})
+
+function chat(channel, from, message, medium) {
+	if (medium == "irc") {
+		if (channel != null) {
+			bot.say(channel, message);
+		}
+		else {
+			bot.say(from, message);
+		}	
+	}
+	else if (medium == "plug") {
+		if (channel != null) {
+			plugBot.sendChat(message);
+		}
+	}
+}
+
+function messageReceived(from, to, text, message, medium) {
+
   if (to == "dbstewardess") {
     if (text.match(/CMDLIST/)) {
-      bot.say(from, messages.toString());
+	  chat(null, from, messages.toString(), medium);
     }
     else if (text.match(/^MEME/)) {
       try {
         var newmeme = JSON.parse(text.substring(4));
         if (parseInt(newmeme.memeId) == Number.NaN ||
             newmeme.memeTrigger.length < 3) {
-          bot.say(from, memeMessage);
+		  chat(null, from, memeMessage, medium);
         }
         else {
           meme_config.memes.push(newmeme);
           fs.writeFileSync('./memeconfig.json', JSON.stringify(meme_config));
-          bot.say(from, 'Yeahhhhhhhhhhhhhhhhhhhhh Boy');
-          bot.say(channel, (newmeme.memeLabel || newmeme.memeTrigger) + ' meme in the house!');
+		  chat(null, from, 'Yeahhhhhhhhhhhhhhhhhhhhh Boy', medium);
+          chat(channel, null, (newmeme.memeLabel || newmeme.memeTrigger) + ' meme in the house!', medium);
         }
       }
       catch (e) {
@@ -113,19 +151,19 @@ bot.addListener("message", function(from, to, text, message) {
       }
     }
     else if (text.match(/^PUPPET/)) {
-      bot.say(from, 'Oooo nice hands');
-      bot.say(channel, text.substring(6));
+	  chat(null, from, 'Oooo nice hands', medium);
+	  chat(channel, null, text.substring(6), medium);
     }
     else {
       fs.appendFile('./dbs.txt', text + '\n', function(err) {
         if (err) {
-          bot.say(from, 'I could not save your text to a file :(');
+		  chat(null, from, 'I could not save your text to a file :(', medium);
         }
         else {
-          bot.say(from, 'Oooo, I extracted that xml');
+		  chat(null, from, 'Oooo, I extracted that xml', medium);
         }
       });
-      bot.say(channel, 'I received a new row from ' + from + '.');
+	  chat(channel, null, 'I received a new row from ' + from + '.', medium);
       messages.push(text);
     }
   }
@@ -152,11 +190,10 @@ bot.addListener("message", function(from, to, text, message) {
                    'My reply is no.',
                    'Outlook good. Fire bad.',
                    'Do not count on it.'];
-      bot.say(channel,
-              an8th[Math.floor(Math.random() * an8th.length)]);
+      chat(channel, null, an8th[Math.floor(Math.random() * an8th.length)], medium);				  
     }
     else {
-      bot.say(channel, messages[Math.floor(Math.random() * messages.length)]);
+	  chat(channel, null, messages[Math.floor(Math.random() * messages.length)], medium);
     }
   }
   else if (text.match(/lunch/i) || text.match(/food/i) || text.match(/hungry/i)) {
@@ -175,14 +212,9 @@ bot.addListener("message", function(from, to, text, message) {
       }
     }
   }
-
-  else if (text.match(/creasy/i)) {
-    var genetiks= ['NO NO NO NO NO NO NO NO NON ONONO NONONONON NONO NON ONONONO NO NO NO NO NO NO',
-                   'You can do that if you are stupid'];
-    bot.send("NICK", "bcreasy");
-    bot.say(channel,
-            genetiks[Math.floor(Math.random() * genetiks.length)]);
-    bot.send("NICK", "dbstewardess");
+  else if (text.match(/stupid\s+([\w\s]+)/i)) {
+	  var match = text.match(/stupid\s+([\w\s]+)/i);
+	  chat(channel, null, "Meeseek open " + from + "'s stupid " + match[1], medium);
   }
   else if (text.match(/jira/i) && text.match(/down/i)) {
     var jira_response = "";
@@ -205,8 +237,7 @@ bot.addListener("message", function(from, to, text, message) {
       });
 
       res.on('end', function() {
-        bot.say(channel,
-                jira_response);
+		chat(channel, null, jira_response, medium);
       });
     });
   }
@@ -232,10 +263,10 @@ bot.addListener("message", function(from, to, text, message) {
             function(res) {
               res.on('data', function(chunk) {
                 try {
-                  bot.say(channel, "You didn't forget to say " + label + "! " + JSON.parse(chunk).data.page_url);
+				  chat(channel, null, "You didn't forget to say " + label + "! " + JSON.parse(chunk).data.page_url, medium);
                 }
                 catch (err) {
-                  bot.say(from, "API call to your meme failed :( - " + call);
+				  chat(null, from, "API call to your meme failed :( - " + call, medium);
                   console.error(err);
                 }
               } 
@@ -243,7 +274,7 @@ bot.addListener("message", function(from, to, text, message) {
       }
     }
   }
-});
+}
 
 function substitute(text, matches) {
   return text.replace(/\$(\d+)/g, function(_, n) {
