@@ -219,7 +219,13 @@ function messageReceived(from, to, text, message, medium) {
   else if (text.match(/jira/i) && text.match(/down/i)) {
     var jira_response = "";
     var not_response = "";
-    http.get("http://www.isthejiradown.com", function(res) {
+    http.get(
+	  {
+        host: 'www.isthejiradown.com',      
+		path: '/',
+        headers: {'User-Agent': 'DBStewardess (Awesomesauce Distro)/1.0'}
+	  },
+	function(res) {
       
       res.on('data', function(chunk) {
         var h1 = /<h1>(.*)<\/h1>/;
@@ -253,17 +259,22 @@ function messageReceived(from, to, text, message, medium) {
           var text1 = substitute(m.memeText1, match);
           var text2 = substitute(m.memeText2, match);
           console.log('MEME:', m.memeId, text1, text2);
-          var call = "http://api.imgflip.com/caption_image?username=" + encodeURIComponent(config.memeUser) +
+          var imgurl = "caption_image?username=" + encodeURIComponent(config.memeUser) +
             "&password=" + encodeURIComponent(config.memePass) +
             "&template_id=" + m.memeId +
             "&text0=" + encodeURIComponent(text1) +
             "&text1=" + encodeURIComponent(text2);
           var label = m.memeLabel || trigger;
-          http.get(call,
+          http.get(	  
+		    {
+              host: 'api.imgflip.com',
+		      path: '/' + imgurl,
+              headers: {'User-Agent': 'DBStewardess (Awesomesauce Distro)/1.0'}
+	        },
             function(res) {
               res.on('data', function(chunk) {
                 try {
-				  chat(channel, null, "You didn't forget to say " + label + "! " + JSON.parse(chunk).data.page_url, medium);
+				  chat(channel, null, "You didn't forget to say " + label + "! " + JSON.parse(chunk).data.url, medium);
                 }
                 catch (err) {
 				  chat(null, from, "API call to your meme failed :( - " + call, medium);
