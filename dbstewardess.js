@@ -9,12 +9,35 @@ var http = require('http');
 var https = require('https');
 var fs = require('fs');
 var PlugAPI = require('plugapi');
+var irc = require("irc");
+var _ = require('lodash');
 
 var messages = fs.readFileSync('./dbs.txt').toString().split('\n');
 var lunch = ['Chipotle', 'Market District', 'Palermo', 'Sams'];
 var lunch_messages = ['I could sure composite some ',
                       'Oh god oh god please bring me a TABLE of ',
                       'Been far too long since I extracted some '];
+
+var magic8 = ['Signs point to hell yes.',
+              'Yes.',
+              'Reply caught in a drug induced haze, try again.',
+              'No doubt.',
+              'My source code says no.',
+              'As I see it, yes.',
+              'You may rely on it.',
+              'Concentrate and ask again.',
+              'Outlook not so good. (Thunderbird sucks too)',
+              'It is decidedly so.',
+              'Better not tell you now.',
+              'Very doubtful.',
+              'Yes - definitely.',
+              'It is as certain as rusty sells drugs',
+              'Cannot predict now',
+              'Most likely',
+              'Ask again after you have eaten a burrito',
+              'My reply is no.',
+              'Outlook good. Fire bad.',
+              'Do not count on it.'];
 
 var config_file = JSON.parse(fs.readFileSync('./dbconfig.txt'));
 var meme_config = JSON.parse(fs.readFileSync('./memeconfig.json'));
@@ -23,11 +46,133 @@ var config = {
 	channels: [channel],
 	server: config_file.server,
 	botName: "dbstewardess",
-        memeUser: config_file.imgflipuser,
-        memePass: config_file.imgflippass
+  memeUser: config_file.imgflipuser,
+  memePass: config_file.imgflippass,
+  userAgent: 'DBStewardess (Awesomesauce Distro)/1.0'
 };
 
-var irc = require("irc");
+var actions = {};
+
+function action(name) {
+  if (!(name in actions)) {
+    actions[name] = require('./actions/' + name);
+  }
+  return actions[name];
+}
+
+var triggers = [];
+
+triggers.push({
+  toSelf: true,
+  mediums: ['irc'],
+  regex: /^CMDLIST/,
+  action: function(dbs) {
+    dbs.reply(messages.toString());
+  }
+});
+
+triggers.push({
+  toSelf: true,
+  mediums: ['irc'],
+  regex: /^MEME\s*(.*)/,
+  action: function(dbs, data) {
+    try {
+      var memeMessage = 'Must be in format: {"memeId": numeric (https://api.imgflip.com/popular_meme_ids), "memeTrigger": "string greater than 3, possibly regex", "memeText1": "string, possibly with backreferences" "memeText2": "string, possibly with backreferences", "memeLabel": "an optional label for the meme"}, e.g. {"memeId":61579,"memeLabel":"one does not simply","memeTrigger":"one does not simply (.*)","memeText1":"one does not simply","memeText2":"$1"}';
+      var newmeme = JSON.parse(data.matches[1]);
+      if (parseInt(newmeme.memeId) == Number.NaN ||
+          newmeme.memeTrigger.length < 3) {
+        dbs.reply(memeMessage);
+      } else {
+        meme_config.memes.push(newmeme);
+        fs.writeFileSync('./memeconfig.json', JSON.stringify(meme_config, null, 2));
+        dbs.reply('Yeahhhhhhhhhhhhhhhhhhhhh Boy');
+        dbs.announce((newmeme.memeLabel || newmeme.memeTrigger) + ' meme in the house!');
+      }
+    } catch (e) {
+      dbs.reply('Could not parse JSON. ' + e.toString() + ' ' + memeMessage);
+    }
+  }
+});
+
+triggers.push({
+  toSelf: true,
+  mediums: ['irc'],
+  regex: /^PUPPET\s*(.*)/,
+  action: function(dbs, data) {
+    dbs.reply('Oooo nice hands');
+    dbs.announce(data.matches[1]);
+  }
+});
+
+triggers.push({
+  toSelf: true,
+  mediums: ['irc'],
+  regex: /(.*)/,
+  action: function(dbs, data) {
+    fs.appendFile('./dbs.txt', data.message + '\n', function(err) {
+      if (err) {
+        dbs.reply('I could not save your text to a file :(');
+      } else {
+        dbs.reply('Oooo, I extracted that xml');
+        dbs.announce('I received a new row from ' + data.from + '!!1!');
+        messages.push(data.message);
+      }
+    });
+  }
+});
+
+triggers.push({
+  mediums: ['irc','plug'],
+  regex: /dbstewardess.*\?$/i,
+  action: action('random')(magic8)
+});
+
+triggers.push({
+  mediums: ['irc','plug'],
+  regex: /dbstewardess/i,
+  action: action('random')(messages)
+});
+
+var lastLunchTime;
+triggers.push({
+  mediums: ['irc','plug'],
+  regex: /lunch|food|hungry/i,
+  action: function(dbs, data) {
+    var newLunchTime = (new Date()).getDate();
+    if (lastLunchTime != newLunchTime) {
+      lastLunchTime = newLunchTime;
+
+      if (data.message.match(/pmo|palermo/i)) {
+        dbs.announce('Oh yeah a TABLE full of pizza');
+      } else {
+        dbs.announce(lunch_messages[Math.floor(Math.random() * lunch_messages.length)] +
+                lunch[Math.floor(Math.random() * lunch.length)]);
+      }
+    }
+  }
+});
+
+triggers.push({
+  mediums: ['irc', 'plug'],
+  regex: /stupid\s+([\w\s]+)/i,
+  action: function(dbs, data) {
+    dbs.announce('Meeseek open ' + data.from + '\'s stupid ' + data.matches[1]);
+  }
+});
+
+triggers.push({
+  mediums: ['irc','plug'],
+  regex: /(jira.*down)|(down.*jira)/i,
+  action: action('isthejiradown')
+});
+
+meme_config.memes.forEach(function(m){
+  triggers.push({
+    mediums: ['irc','plug'],
+    regex: new RegExp(m.memeTrigger, 'i'),
+    action: action('meme')(m)
+  });
+});
 
 var bot = new irc.Client(config.server, config.botName, {
   debug: true,
@@ -58,7 +203,7 @@ var jenkinsOptions = {
 	auth: config_file.jenkinsusertoken,
 	method: 'GET',
 	rejectUnauthorized: 0
-}
+};
 
 /*
 Jenkins logic needs rewired
@@ -101,14 +246,14 @@ bot.addListener("message", function(from, to, text, message) {
 });
 
 plugBot.on('chat', function(data) {
-	if (data.from != "OGDBStewardess") {
-	  messageReceived(data.from, "", data.message, "", "plug")
-	}
+  if (data.from != "OGDBStewardess") {
+    messageReceived(data.from, "", data.message, "", "plug")
+  }
 });
 
 plugBot.on('advance', function(data) {
-	plugBot.woot(function(){});
-})
+  plugBot.woot(function(){});
+});
 
 function chat(channel, from, message, medium) {
 	if (medium == "irc") {
@@ -127,169 +272,40 @@ function chat(channel, from, message, medium) {
 }
 
 function messageReceived(from, to, text, message, medium) {
+  var dbstewardess = {
+    config: config,
+    reply: function(message) {
+      chat(null, from, message, medium);
+    },
+    announce: function(message) {
+      chat(channel, null, message, medium);
+    }
+  };
+  var data = {
+    from: from,
+    to: to,
+    message: text,
+    medium: medium
+  };
 
-  if (to == "dbstewardess") {
-    if (text.match(/CMDLIST/)) {
-	  chat(null, from, messages.toString(), medium);
+  _.some(triggers, function(t) {
+    if (t.toSelf && to != config.botName) {
+      return false;
     }
-    else if (text.match(/^MEME/)) {
-      try {
-        var newmeme = JSON.parse(text.substring(4));
-        if (parseInt(newmeme.memeId) == Number.NaN ||
-            newmeme.memeTrigger.length < 3) {
-		  chat(null, from, memeMessage, medium);
-        }
-        else {
-          meme_config.memes.push(newmeme);
-          fs.writeFileSync('./memeconfig.json', JSON.stringify(meme_config));
-		  chat(null, from, 'Yeahhhhhhhhhhhhhhhhhhhhh Boy', medium);
-          chat(channel, null, (newmeme.memeLabel || newmeme.memeTrigger) + ' meme in the house!', medium);
-        }
-      }
-      catch (e) {
-        bot.say(from, 'Could not parse JSON. ' + memeMessage);
+    if (t.mediums.indexOf(medium) === -1) {
+      return false;
+    }
+    if (t.regex) {
+      var matches = text.match(t.regex);
+      if (matches !== null) {
+        data.matches = matches;
+        data.trigger = t;
+        t.action(dbstewardess, data);
+        return true;
       }
     }
-    else if (text.match(/^PUPPET/)) {
-	  chat(null, from, 'Oooo nice hands', medium);
-	  chat(channel, null, text.substring(6), medium);
-    }
-    else {
-      fs.appendFile('./dbs.txt', text + '\n', function(err) {
-        if (err) {
-		  chat(null, from, 'I could not save your text to a file :(', medium);
-        }
-        else {
-		  chat(null, from, 'Oooo, I extracted that xml', medium);
-        }
-      });
-	  chat(channel, null, 'I received a new row from ' + from + '.', medium);
-      messages.push(text);
-    }
-  }
-  else if (text.match(/dbstewardess/i)) {
-    if (text.match(/\?$/)) {
-      // magic 8ball
-      var an8th = ['Signs point to hell yes.',
-                   'Yes.',
-                   'Reply caught in a drug induced haze, try again.',
-                   'No doubt.',
-                   'My source code says no.',
-                   'As I see it, yes.',
-                   'You may rely on it.',
-                   'Concentrate and ask again.',
-                   'Outlook not so good. (Thunderbird sucks too)',
-                   'It is decidedly so.',
-                   'Better not tell you now.',
-                   'Very doubtful.',
-                   'Yes - definitely.',
-                   'It is as certain as rusty sells drugs',
-                   'Cannot predict now',
-                   'Most likely',
-                   'Ask again after you have eaten a burrito',
-                   'My reply is no.',
-                   'Outlook good. Fire bad.',
-                   'Do not count on it.'];
-      chat(channel, null, an8th[Math.floor(Math.random() * an8th.length)], medium);				  
-    }
-    else {
-	  chat(channel, null, messages[Math.floor(Math.random() * messages.length)], medium);
-    }
-  }
-  else if (text.match(/lunch/i) || text.match(/food/i) || text.match(/hungry/i)) {
-	var newLunchTime = (new Date()).getDate();
-	if (lastLunchTime != newLunchTime) {
-	  lastLunchTime = newLunchTime;
-	
-      if (text.match(/pmo/i) || text.match(/palermo/i)) {
-        bot.say(channel,
-                "Oh yeah a TABLE full of pizza");
-      }
-      else {
-        bot.say(channel,
-                lunch_messages[Math.floor(Math.random() * lunch_messages.length)] +
-                lunch[Math.floor(Math.random() * lunch.length)]);
-      }
-    }
-  }
-  else if (text.match(/stupid\s+([\w\s]+)/i)) {
-	  var match = text.match(/stupid\s+([\w\s]+)/i);
-	  chat(channel, null, "Meeseek open " + from + "'s stupid " + match[1], medium);
-  }
-  else if (text.match(/jira/i) && text.match(/down/i)) {
-    var jira_response = "";
-    var not_response = "";
-    http.get(
-	  {
-        host: 'www.isthejiradown.com',      
-		path: '/',
-        headers: {'User-Agent': 'DBStewardess (Awesomesauce Distro)/1.0'}
-	  },
-	function(res) {
-      
-      res.on('data', function(chunk) {
-        var h1 = /<h1>(.*)<\/h1>/;
-        var p = /<p>(.*)<\/p>[\s\S]*<p>(.*)<\/p>/;
-        if (h1.exec(chunk) != null) {
-          var match = h1.exec(chunk);
-          jira_response += match[1] + ". ";
-        }
-        if(p.exec(chunk) != null) {
-          var match = p.exec(chunk);
-          jira_response += match[1] + " ";
-          jira_response += match[2];
-        }
-        
-      });
-
-      res.on('end', function() {
-		chat(channel, null, jira_response, medium);
-      });
-    });
-  }
-  else {
-    for (var i = 0; i < meme_config.memes.length; i++) {
-      var m = meme_config.memes[i];
-      var reg = new RegExp(m.memeTrigger, 'i');
-      console.log('match?', text, m.memeTrigger, console.log(text.match(reg)));
-      if (text.match(reg)) {
-          var match = text.match(reg);
-
-          var trigger = m.memeTrigger;
-          var text1 = substitute(m.memeText1, match);
-          var text2 = substitute(m.memeText2, match);
-          console.log('MEME:', m.memeId, text1, text2);
-          var imgurl = "caption_image?username=" + encodeURIComponent(config.memeUser) +
-            "&password=" + encodeURIComponent(config.memePass) +
-            "&template_id=" + m.memeId +
-            "&text0=" + encodeURIComponent(text1) +
-            "&text1=" + encodeURIComponent(text2);
-          var label = m.memeLabel || trigger;
-          http.get(	  
-		    {
-              host: 'api.imgflip.com',
-		      path: '/' + imgurl,
-              headers: {'User-Agent': 'DBStewardess (Awesomesauce Distro)/1.0'}
-	        },
-            function(res) {
-              res.on('data', function(chunk) {
-                try {
-				  chat(channel, null, "You didn't forget to say " + label + "! " + JSON.parse(chunk).data.url, medium);
-                }
-                catch (err) {
-				  chat(null, from, "API call to your meme failed :( - " + call, medium);
-                  console.error(err);
-                }
-              } 
-          )});
-      }
-    }
-  }
-}
-
-function substitute(text, matches) {
-  return text.replace(/\$(\d+)/g, function(_, n) {
-    return matches[parseInt(n)];
+    return false;
   });
 }
+
 
