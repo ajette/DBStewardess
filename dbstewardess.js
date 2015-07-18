@@ -245,6 +245,10 @@ bot.addListener("message", function(from, to, text, message) {
 	messageReceived(from, to, text, message, "irc");
 });
 
+bot.addListener('error', function(message) {
+  console.warn('error: ', message);
+});
+
 plugBot.on('chat', function(data) {
   if (data.from != "OGDBStewardess") {
     messageReceived(data.from, "", data.message, "", "plug")
