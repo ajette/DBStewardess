@@ -177,7 +177,9 @@ meme_config.memes.forEach(function(m){
 var bot = new irc.Client(config.server, config.botName, {
   debug: true,
   channels: config.channels,
-  password: config_file.password
+  password: config_file.password,
+  	selfSigned: true,
+    secure: true
 });
 
 var plugBot = new PlugAPI({
