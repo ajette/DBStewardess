@@ -166,6 +166,12 @@ triggers.push({
   action: action('isthejiradown')
 });
 
+triggers.push({
+  mediums: ['irc','plug'],
+  regex: /flip.*coin/i,
+  action: action('flipacoin')
+});
+
 meme_config.memes.forEach(function(m){
   triggers.push({
     mediums: ['irc','plug'],
@@ -181,12 +187,6 @@ var bot = new irc.Client(config.server, config.botName, {
   	selfSigned: true,
     secure: true
 });
-
-var plugBot = new PlugAPI({
-    "email": config_file.plugemail,
-    "password": config_file.plugpassword
-});
-plugBot.connect(config_file.plugroom);
 
 setTimeout(function() {
 	bot.disc
@@ -251,16 +251,6 @@ bot.addListener('error', function(message) {
   console.warn('error: ', message);
 });
 
-plugBot.on('chat', function(data) {
-  if (data.from != "OGDBStewardess") {
-    messageReceived(data.from, "", data.message, "", "plug")
-  }
-});
-
-plugBot.on('advance', function(data) {
-  plugBot.woot(function(){});
-});
-
 function chat(channel, from, message, medium) {
 	if (medium == "irc") {
 		if (channel != null) {
@@ -269,11 +259,6 @@ function chat(channel, from, message, medium) {
 		else {
 			bot.say(from, message);
 		}	
-	}
-	else if (medium == "plug") {
-		if (channel != null) {
-			plugBot.sendChat(message);
-		}
 	}
 }
 
